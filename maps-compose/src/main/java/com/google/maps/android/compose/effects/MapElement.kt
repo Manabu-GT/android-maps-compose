@@ -39,6 +39,15 @@ import com.google.android.gms.maps.GoogleMap as GmsGoogleMap
  * conditional `set` calls, and cleanup on element recreation are all handled by the
  * composition's slot table, which is the same machinery that backs `Updater.set` diffing in the
  * applier architecture.
+ *
+ * Cost note: `Updater.set` (available only inside `ComposeNode`, i.e. with an applier) diffs
+ * per-property *slots* within a single node group and records apply-blocks only for changed
+ * values; this class instead creates one small group + remembered cell per property and
+ * enqueues one [SideEffect] per property on each executing recomposition, most of which
+ * compare-and-skip. That overhead is ordinary at per-element scale but is measurably heavier
+ * for bulk mutations of thousands of elements. If profiling ever shows it, the intermediate
+ * design is per-property cells that self-register into this updater once, walked by a single
+ * [SideEffect] — per-property slots with one dispatch, still without manual slot bookkeeping.
  */
 public class ElementUpdater<T : Any> internal constructor(
     /**
