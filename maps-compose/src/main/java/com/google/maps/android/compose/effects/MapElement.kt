@@ -94,6 +94,12 @@ public class ElementUpdater<T : Any> internal constructor(
  * conditional control flow behave exactly as they do for applier nodes — the slot table does
  * that bookkeeping in both architectures.
  *
+ * **[keys] are identity keys, not property values.** Pass an object only when swapping it means
+ * "this composable now controls a *different* Maps SDK object" (e.g. [Marker] passes its
+ * `MarkerState` instance). Anything expressible as a setter belongs in [update]; passing a
+ * changing property value (a color, a width) as a key turns cheap in-place updates into
+ * teardown and recreation of the element on every change.
+ *
  * Unlike applier nodes, this is public: third parties can add support for map object types the
  * library does not cover (e.g. a `Circle` or `GroundOverlay`) without library internals.
  *
