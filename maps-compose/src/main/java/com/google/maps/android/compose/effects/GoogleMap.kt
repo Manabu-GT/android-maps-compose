@@ -23,8 +23,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -62,8 +62,8 @@ import com.google.maps.android.ktx.awaitMap
  * Architectural experiment: instead of launching a second [androidx.compose.runtime.Composition]
  * driven by a custom `MapApplier`, the map content is an ordinary part of the caller's UI
  * composition. Map element composables ([Marker], [Polyline]) emit no layout nodes; they manage
- * their Maps SDK objects through [DisposableEffect] (lifecycle) and diffed [SideEffect]s
- * (property updates) via [MapElement].
+ * their Maps SDK objects through [DisposableEffect] (lifecycle) and diffed apply-phase updates
+ * ([ElementUpdater]) via [MapElement].
  *
  * Consequences compared to the applier architecture:
  * - one composition: `CompositionLocal`s provided around map content reach the content lexically,
@@ -189,9 +189,10 @@ public fun GoogleMap(
 
 /**
  * Keeps the map's runtime-configurable properties in sync — the effect-based counterpart of
- * `MapUpdater`/`MapPropertiesNode`, using the same recording-pass + diffed-apply mechanism as
- * element updates. The first apply pass applies everything, because the map was created from
- * [GoogleMapOptions] defaults rather than from these values.
+ * `MapUpdater`/`MapPropertiesNode`, using the same diffed apply-phase mechanism as element
+ * updates. The first apply pass applies everything ([ElementUpdater.valuesAppliedAtCreation] is
+ * false), because the map was created from [GoogleMapOptions] defaults rather than from these
+ * values.
  */
 @SuppressLint("MissingPermission")
 @Composable
@@ -201,11 +202,13 @@ private fun MapPropertiesUpdater(
     uiSettings: MapUiSettings,
     contentPadding: PaddingValues,
     locationSource: LocationSource?,
-) {
+) = key(map) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
-    val scope = remember(map) { UpdateScope<GmsGoogleMap>().also { it.attachUnapplied(map) } }
-    scope.record {
+    val updater = remember {
+        ElementUpdater<GmsGoogleMap>(valuesAppliedAtCreation = false).also { it.element = map }
+    }
+    with(updater) {
         set(Triple(contentPadding, density, layoutDirection)) { (padding, d, ld) ->
             applyContentPadding(padding, d, ld)
         }
@@ -253,7 +256,6 @@ private fun MapPropertiesUpdater(
             try { this.uiSettings.isZoomGesturesEnabled = it } catch (e: Exception) { }
         }
     }
-    SideEffect { scope.applyPending() }
 }
 
 private fun GmsGoogleMap.applyContentPadding(
